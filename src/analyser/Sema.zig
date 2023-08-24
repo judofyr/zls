@@ -244,7 +244,7 @@ fn analyzeBodyInner(
             .ret_is_non_err               => try sema.getUnknownValue(Index.bool_type),
             .is_non_null                  => try sema.getUnknownValue(Index.bool_type),
             .is_non_null_ptr              => try sema.getUnknownValue(Index.bool_type),
-            .merge_error_sets             => .none,
+            .merge_error_sets             => Index.unknown_type,
             .negate                       => .none,
             .negate_wrap                  => .none,
             .optional_payload_safe        => try sema.zirOptionalPayload(block,inst),
@@ -285,7 +285,7 @@ fn analyzeBodyInner(
             .array_init_elem_type         => .none,
             .array_init_elem_ptr          => .none,
             .union_init                   => .none,
-            .field_type_ref               => .none,
+            .field_type_ref               => Index.unknown_type,
             .int_from_ptr                 => try sema.getUnknownValue(Index.usize_type),
             .align_of                     => try sema.getUnknownValue(Index.comptime_int_type),
             .int_from_bool                => try sema.zirIntFromBool(block, inst),
@@ -293,7 +293,7 @@ fn analyzeBodyInner(
             .error_name                   => .none,
             .tag_name                     => .none,
             .type_name                    => .none,
-            .frame_type                   => .none,
+            .frame_type                   => Index.unknown_type,
             .frame_size                   => try sema.getUnknownValue(Index.usize_type),
             .int_from_float               => .none,
             .float_from_int               => .none,
@@ -302,8 +302,8 @@ fn analyzeBodyInner(
             .int_cast                     => .none,
             .ptr_cast                     => .none,
             .truncate                     => .none,
-            .has_decl                     => .none,
-            .has_field                    => .none,
+            .has_decl                     => try sema.getUnknownValue(Index.bool_type),
+            .has_field                    => try sema.getUnknownValue(Index.bool_type),
             .byte_swap                    => .none,
             .bit_reverse                  => .none,
             .bit_offset_of                => try sema.getUnknownValue(Index.comptime_int_type),
@@ -318,7 +318,7 @@ fn analyzeBodyInner(
             .field_parent_ptr             => .none,
             .@"resume"                    => .none,
             .@"await"                     => .none,
-            .for_len                      => .none,
+            .for_len                      => try sema.getUnknownValue(Index.usize_type),
             .validate_array_init_ref_ty   => .none,
             .opt_eu_base_ptr_init         => .none,
             .coerce_ptr_elem_ty           => .none,
@@ -395,10 +395,10 @@ fn analyzeBodyInner(
                     // zig fmt: off
                     .variable              => .none,
                     .struct_decl           => try sema.zirStructDecl(        block, extended, inst),
-                    .enum_decl             => .none,
-                    .union_decl            => .none,
-                    .opaque_decl           => .none,
-                    .this                  => try sema.getUnknownValue(Index.type_type),
+                    .enum_decl             => Index.unknown_type,
+                    .union_decl            => Index.unknown_type,
+                    .opaque_decl           => Index.unknown_type,
+                    .this                  => Index.unknown_type,
                     .ret_addr              => try sema.getUnknownValue(Index.usize_type),
                     .builtin_src           => .none,
                     .error_return_trace    => .none,
@@ -421,13 +421,13 @@ fn analyzeBodyInner(
                     .c_define              => .none,
                     .wasm_memory_size      => try sema.getUnknownValue(Index.u32_type),
                     .wasm_memory_grow      => try sema.getUnknownValue(Index.u32_type),
-                    .prefetch              => .none,
+                    .prefetch              => Index.void_value,
                     .error_cast            => .none,
                     .await_nosuspend       => .none,
                     .select                => .none,
                     .int_from_error        => .none,
                     .error_from_int        => .none,
-                    .reify                 => try sema.getUnknownValue(Index.type_type),
+                    .reify                 => Index.unknown_type,
                     .builtin_async_call    => .none,
                     .cmpxchg               => .none,
                     .c_va_arg              => .none,
@@ -436,10 +436,10 @@ fn analyzeBodyInner(
                     .c_va_start            => .none,
                     .ptr_cast_full         => .none,
                     .ptr_cast_no_dest      => .none,
-                    .work_item_id          => .none,
-                    .work_group_size       => .none,
-                    .work_group_id         => .none,
-                    .in_comptime           => .none,
+                    .work_item_id          => try sema.getUnknownValue(Index.u32_type),
+                    .work_group_size       => try sema.getUnknownValue(Index.u32_type),
+                    .work_group_id         => try sema.getUnknownValue(Index.u32_type),
+                    .in_comptime           => try sema.zirInComptime(        block),
                     // zig fmt: on
 
                     .fence,
@@ -1861,6 +1861,14 @@ fn zirTypeofPeer(
     }
 
     return sema.mod.ip.resolvePeerTypes(sema.gpa, arg_types, builtin.target);
+}
+
+fn zirInComptime(
+    sema: *Sema,
+    block: *Block,
+) Allocator.Error!Index {
+    _ = sema;
+    return if (block.is_comptime) .bool_true else .bool_false;
 }
 
 fn zirIntFromBool(sema: *Sema, block: *Block, inst: Zir.Inst.Index) Allocator.Error!Index {
