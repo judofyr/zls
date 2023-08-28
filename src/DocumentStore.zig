@@ -654,6 +654,11 @@ pub fn refreshDocument(self: *DocumentStore, uri: Uri, new_text: [:0]const u8) !
     handle.import_uris = try self.collectImportUris(handle.*);
     handle.cimports = try collectCIncludes(self.allocator, handle.tree);
 
+    // TODO
+    // if (self.config.analysis_backend == .astgen_analyser) {
+    //     try analysis.transferInternPoolData(self.allocator, handle, &new_handle.document_scope);
+    // }
+
     if (self.config.analysis_backend == .astgen_analyser) blk: {
         const zir = try handle.getZir();
         if (zir.hasCompileErrors()) break :blk;
