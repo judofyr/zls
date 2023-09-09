@@ -224,7 +224,7 @@ fn analyzeBodyInner(
             .err_union_payload_unsafe     => .none,
             .err_union_payload_unsafe_ptr => .none,
             .error_union_type             => try sema.zirErrorUnionType(block, inst),
-            .error_value                  => .none,
+            .error_value                  => try sema.zirErrorValue(block, inst),
             .field_ptr                    => .none,
             .field_ptr_named              => .none,
             .field_val                    => try sema.zirFieldVal(block, inst),
@@ -1234,6 +1234,25 @@ fn zirErrorUnionType(sema: *Sema, block: *Block, inst: Zir.Inst.Index) Allocator
     } });
 }
 
+fn zirErrorValue(sema: *Sema, block: *Block, inst: Zir.Inst.Index) Allocator.Error!Index {
+    const tracy = trace(@src());
+    defer tracy.end();
+
+    const inst_data = sema.code.instructions.items(.data)[inst].str_tok;
+    const name = try sema.mod.ip.string_pool.getOrPutString(sema.gpa, inst_data.get(sema.code));
+    _ = block;
+
+    const error_set_type = try sema.get(.{ .error_set_type = .{
+        .owner_decl = .none,
+        .names = &.{name},
+    } });
+
+    return try sema.get(.{ .error_value = .{
+        .ty = error_set_type,
+        .error_tag_name = name,
+    } });
+}
+
 fn lookupIdentifier(sema: *Sema, block: *Block, name: []const u8) !?DeclIndex {
     var namespace_index = block.namespace;
 
@@ -1310,6 +1329,8 @@ fn fieldVal(
     switch (sema.indexToKey(inner_ty)) {
         .simple_type => |simple| switch (simple) {
             .type => {
+                if (sema.mod.ip.isUnknown(val)) return .unknown_unknown;
+
                 const namespace_index = sema.mod.ip.getNamespace(val);
 
                 if (namespace_index != .none) {
@@ -1324,15 +1345,13 @@ fn fieldVal(
                 }
 
                 switch (sema.indexToKey(val)) {
-                    .simple_type => |simple_ty| switch (simple_ty) {
-                        .unknown => return .unknown_unknown,
-                        else => {},
-                    },
-                    .unknown_value => return .unknown_unknown,
                     .error_set_type => |error_set_info| blk: {
                         const name_index = sema.mod.ip.string_pool.getString(field_name) orelse break :blk;
                         if (std.mem.indexOfScalar(StringPool.String, error_set_info.names, name_index) == null) break :blk;
-                        return try sema.getUnknownValue(val); // TODO
+                        return try sema.get(.{ .error_value = .{
+                            .ty = val,
+                            .error_tag_name = name_index,
+                        } });
                     },
                     .union_type => return .unknown_unknown, // TODO
                     .enum_type => |enum_index| blk: {
@@ -1433,6 +1452,7 @@ fn fieldVal(
         .aggregate,
         .union_value,
         .null_value,
+        .error_value,
         .undefined_value,
         => unreachable,
 
