@@ -3086,9 +3086,17 @@ pub const DeclWithHandle = struct {
                 return null;
             },
             .error_token => return null,
-            .intern_pool_index => |payload| return TypeWithHandle{
-                .type = .{ .data = .{ .ip_index = .{ .index = payload.index } }, .is_type_val = false },
-                .handle = self.handle,
+            .intern_pool_index => |payload| {
+                if (payload.index == .none) return null;
+                if (try analyser.ip.isUnknownDeep(analyser.arena.allocator(), payload.index)) return null;
+
+                return TypeWithHandle{
+                    .type = .{
+                        .data = .{ .ip_index = .{ .index = payload.index } },
+                        .is_type_val = false,
+                    },
+                    .handle = self.handle,
+                };
             },
         };
     }
