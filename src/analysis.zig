@@ -1100,7 +1100,7 @@ fn resolveTypeOfNodeUncached(analyser: *Analyser, node_handle: NodeWithHandle) e
             if (!is_escaped_identifier) {
                 if (std.mem.eql(u8, name, "_")) return null;
                 if (resolvePrimitiveType(name)) |primitive| {
-                    const is_type = analyser.ip.indexToKey(primitive).typeOf() == .type_type;
+                    const is_type = analyser.ip.typeOf(primitive) == .type_type;
                     return TypeWithHandle{
                         .type = .{ .data = .{ .ip_index = .{ .index = primitive } }, .is_type_val = is_type },
                         .handle = handle,
@@ -1218,7 +1218,6 @@ fn resolveTypeOfNodeUncached(analyser: *Analyser, node_handle: NodeWithHandle) e
                     }
                     return null;
                 };
-                const is_type_val = interpreter.ip.indexToKey(value.index).typeOf() == .type_type;
 
                 return TypeWithHandle{
                     .type = .{
@@ -1226,7 +1225,7 @@ fn resolveTypeOfNodeUncached(analyser: *Analyser, node_handle: NodeWithHandle) e
                             .node = value.node_idx,
                             .index = value.index,
                         } },
-                        .is_type_val = is_type_val,
+                        .is_type_val = interpreter.ip.isType(value.index),
                     },
                     .handle = node_handle.handle,
                 };
@@ -3984,8 +3983,8 @@ pub fn referencedTypes(
         .ip_index => |payload| {
             const allocator = collector.referenced_types.allocator;
             const ip = analyser.ip;
-            const index = if (resolved_type.type.is_type_val) ip.indexToKey(payload.index).typeOf() else payload.index;
-            resolved_type_str.* = try std.fmt.allocPrint(allocator, "{}", .{index.fmt(ip.*)});
+            const index = if (resolved_type.type.is_type_val) ip.typeOf(payload.index) else payload.index;
+            resolved_type_str.* = try std.fmt.allocPrint(allocator, "{}", .{index.fmt(ip)});
         },
         else => {},
     }
@@ -4233,14 +4232,14 @@ fn addReferencedTypes(
                 const is_escaped_identifier = tree.source[tree.tokens.items(.start)[name_token]] == '@';
                 if (is_escaped_identifier) return null;
                 const primitive = Analyser.resolvePrimitiveType(name) orelse return null;
-                return try std.fmt.allocPrint(allocator, "{}", .{primitive.fmt(analyser.ip.*)});
+                return try std.fmt.allocPrint(allocator, "{}", .{primitive.fmt(analyser.ip)});
             },
 
             else => {}, // TODO: Implement more "other" type expressions; better safe than sorry
         },
 
         .ip_index => |payload| {
-            return try std.fmt.allocPrint(allocator, "{}", .{payload.index.fmt(analyser.ip.*)});
+            return try std.fmt.allocPrint(allocator, "{}", .{payload.index.fmt(analyser.ip)});
         },
 
         .either => {}, // TODO
