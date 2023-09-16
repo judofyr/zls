@@ -1664,7 +1664,7 @@ fn structInitExpr(
                     return rvalue(gz, ri, val, node);
                 },
                 .none, .ref, .inferred_ptr => {
-                    return rvalue(gz, ri, .empty_struct_type, node);
+                    return rvalue(gz, ri, .empty_aggregate, node);
                 },
                 .destructure => |destructure| {
                     return astgen.failNodeNotes(node, "empty initializer cannot be destructured", .{}, &.{
@@ -3154,6 +3154,7 @@ fn varDecl(
             var resolve_inferred_alloc: Zir.Inst.Ref = .none;
             const alloc: Zir.Inst.Ref, const result_info: ResultInfo = if (var_decl.ast.type_node != 0) a: {
                 const type_inst = try typeExpr(gz, scope, var_decl.ast.type_node);
+                try gz.addDbgVar(.dbg_var_val, ident_name, type_inst);
                 const alloc = alloc: {
                     if (align_inst == .none) {
                         const tag: Zir.Inst.Tag = if (is_comptime)
@@ -3195,13 +3196,12 @@ fn varDecl(
             };
             const prev_anon_name_strategy = gz.anon_name_strategy;
             gz.anon_name_strategy = .dbg_var;
-            _ = try reachableExprComptime(gz, scope, result_info, var_decl.ast.init_node, node, is_comptime);
+            const init_expr = try reachableExprComptime(gz, scope, result_info, var_decl.ast.init_node, node, is_comptime);
             gz.anon_name_strategy = prev_anon_name_strategy;
             if (resolve_inferred_alloc != .none) {
                 _ = try gz.addUnNode(.resolve_inferred_alloc, resolve_inferred_alloc, node);
+                try gz.addDbgVar(.dbg_var_ptr, ident_name, init_expr);
             }
-
-            try gz.addDbgVar(.dbg_var_ptr, ident_name, alloc);
 
             const sub_scope = try block_arena.create(Scope.LocalPtr);
             sub_scope.* = .{
