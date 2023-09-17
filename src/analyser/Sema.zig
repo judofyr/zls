@@ -1466,7 +1466,7 @@ fn fieldVal(
     }
 
     try sema.fail(block, src, .{ .unknown_field = .{
-        .accessed_ty = inner_ty,
+        .accessed = val,
         .field_name = field_name,
     } });
     return .unknown_unknown;
