@@ -307,10 +307,9 @@ fn getAutofixMode(server: *Server) enum {
 /// caller owns returned memory.
 fn autofix(server: *Server, arena: std.mem.Allocator, handle: *const DocumentStore.Handle) error{OutOfMemory}!std.ArrayListUnmanaged(types.TextEdit) {
     if (!server.config.enable_ast_check_diagnostics) return .{};
-    if (handle.tree.errors.len != 0) return .{};
 
     var diagnostics = std.ArrayListUnmanaged(types.Diagnostic){};
-    try diagnostics_gen.getAstCheckDiagnostics(server, arena, handle.*, &diagnostics);
+    try diagnostics_gen.getDiagnostics(server, arena, handle.*, &diagnostics);
     if (diagnostics.items.len == 0) return .{};
 
     var analyser = Analyser.init(server.allocator, &server.document_store, &server.ip);
@@ -1548,11 +1547,8 @@ fn codeActionHandler(server: *Server, arena: std.mem.Allocator, request: types.C
         .offset_encoding = server.offset_encoding,
     };
 
-    // as of right now, only ast-check errors may get a code action
     var diagnostics = std.ArrayListUnmanaged(types.Diagnostic){};
-    if (server.config.enable_ast_check_diagnostics and handle.tree.errors.len == 0) {
-        try diagnostics_gen.getAstCheckDiagnostics(server, arena, handle.*, &diagnostics);
-    }
+    try diagnostics_gen.getDiagnostics(server, arena, handle.*, &diagnostics);
 
     var actions = std.ArrayListUnmanaged(types.CodeAction){};
     var remove_capture_actions = std.AutoHashMapUnmanaged(types.Range, void){};

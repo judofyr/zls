@@ -38,6 +38,7 @@ pub const Builder = struct {
             },
             // the undeclared identifier may be a discard
             .undeclared_identifier => try handlePointlessDiscard(builder, actions, loc),
+            .missing_semicolon => try handleMissingSemicolon(builder, actions, loc),
             .unreachable_code => {
                 // TODO
                 // autofix: comment out code
@@ -254,6 +255,20 @@ fn handlePointlessDiscard(builder: *Builder, actions: *std.ArrayListUnmanaged(ty
     });
 }
 
+fn handleMissingSemicolon(builder: *Builder, actions: *std.ArrayListUnmanaged(types.CodeAction), loc: offsets.Loc) !void {
+    const tracy_zone = tracy.trace(@src());
+    defer tracy_zone.end();
+
+    const edit_loc = offsets.Loc{ .start = loc.end, .end = loc.end };
+
+    try actions.append(builder.arena, .{
+        .title = "add missing semicolon",
+        .kind = .@"source.fixAll",
+        .isPreferred = true,
+        .edit = try builder.createWorkspaceEdit(&.{builder.createTextEditLoc(edit_loc, ";")}),
+    });
+}
+
 fn detectIndentation(source: []const u8) []const u8 {
     // Essentially I'm looking for the first indentation in the file.
     var i: usize = 0;
@@ -380,6 +395,7 @@ const DiagnosticKind = union(enum) {
     non_camelcase_fn,
     undeclared_identifier,
     unreachable_code,
+    missing_semicolon,
 
     const IdCat = enum {
         @"function parameter",
@@ -413,6 +429,8 @@ const DiagnosticKind = union(enum) {
             return .non_camelcase_fn;
         } else if (std.mem.startsWith(u8, msg, "use of undeclared identifier")) {
             return .undeclared_identifier;
+        } else if (std.mem.eql(u8, msg, "expected ';' after statement")) {
+            return .missing_semicolon;
         }
         return null;
     }
