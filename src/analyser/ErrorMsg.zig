@@ -144,18 +144,21 @@ pub const ErrorMsg = union(enum) {
                 "duplicate struct field: '{}'",
                 .{info.name.fmt(&ip.string_pool)},
             ),
-            .unknown_field => |info| if (ip.canHaveFields(ip.typeOf(info.accessed)))
-                std.fmt.format(
-                    writer,
-                    "`{}` has no member '{s}'",
-                    .{ info.accessed.fmt(ip), info.field_name },
-                )
-            else
-                std.fmt.format(
-                    writer,
-                    "`{}` does not support field access",
-                    .{info.accessed.fmt(ip)},
-                ),
+            .unknown_field => |info| blk: {
+                const accessed_ty = ip.typeOf(info.accessed);
+                break :blk if (ip.canHaveFields(accessed_ty))
+                    std.fmt.format(
+                        writer,
+                        "'{}' has no member '{s}'",
+                        .{ accessed_ty.fmt(ip), info.field_name },
+                    )
+                else
+                    std.fmt.format(
+                        writer,
+                        "'{}' does not support field access",
+                        .{accessed_ty.fmt(ip)},
+                    );
+            },
         };
     }
 };
