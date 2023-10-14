@@ -15,6 +15,7 @@ const translate_c = @import("translate_c.zig");
 const ComptimeInterpreter = @import("ComptimeInterpreter.zig");
 const AstGen = @import("stage2/AstGen.zig");
 const Zir = @import("stage2/Zir.zig");
+const Module = @import("analyser/Module.zig");
 const InternPool = @import("analyser/InternPool.zig");
 const DocumentScope = @import("DocumentScope.zig");
 
@@ -147,6 +148,7 @@ pub const BuildFile = struct {
 pub const Handle = struct {
     uri: Uri,
     tree: Ast,
+    root_decl: InternPool.OptionalDeclIndex = .none,
     /// Contains one entry for every import in the document
     import_uris: std.ArrayListUnmanaged(Uri) = .{},
     /// Contains one entry for every cimport in the document
@@ -226,6 +228,13 @@ pub const Handle = struct {
     pub fn getZir(self: *Handle) error{OutOfMemory}!Zir {
         if (self.getStatus().has_zir) return self.impl.zir;
         return try self.getZirCold();
+    }
+
+    pub fn getCachedZir(self: *Handle) Zir {
+        if (std.debug.runtime_safety) {
+            std.debug.assert(self.getStatus().has_zir);
+        }
+        return self.impl.zir;
     }
 
     pub fn getZirStatus(self: Handle) ZirStatus {
@@ -439,7 +448,7 @@ pub const Handle = struct {
         }
     }
 
-    fn deinit(self: *Handle) void {
+    fn deinit(self: *Handle, mod: ?*Module) void {
         const tracy_zone = tracy.trace(@src());
         defer tracy_zone.end();
 
@@ -451,6 +460,7 @@ pub const Handle = struct {
             self.impl.comptime_interpreter.deinit();
             allocator.destroy(self.impl.comptime_interpreter);
         }
+        if (self.root_decl.unwrap()) |decl_index| mod.?.destroyDecl(decl_index);
         if (status.has_zir) self.impl.zir.deinit(allocator);
         if (status.has_document_scope) self.impl.document_scope.deinit(allocator);
         allocator.free(self.tree.source);
@@ -483,10 +493,11 @@ lock: std.Thread.RwLock = .{},
 handles: std.StringArrayHashMapUnmanaged(*Handle) = .{},
 build_files: std.StringArrayHashMapUnmanaged(*BuildFile) = .{},
 cimports: std.AutoArrayHashMapUnmanaged(Hash, translate_c.Result) = .{},
+mod: ?*Module = null,
 
 pub fn deinit(self: *DocumentStore) void {
     for (self.handles.values()) |handle| {
-        handle.deinit();
+        handle.deinit(self.mod);
         self.allocator.destroy(handle);
     }
     self.handles.deinit(self.allocator);
@@ -642,6 +653,21 @@ pub fn refreshDocument(self: *DocumentStore, uri: Uri, new_text: [:0]const u8) !
     try handle.setSource(new_text);
     handle.import_uris = try self.collectImportUris(handle.*);
     handle.cimports = try collectCIncludes(self.allocator, handle.tree);
+
+    if (self.config.analysis_backend == .astgen_analyser) blk: {
+        const zir = try handle.getZir();
+        if (zir.hasCompileErrors()) break :blk;
+        switch (handle.getZirStatus()) {
+            .none => {},
+            .outdated => break :blk, // TODO support oudated
+            .done => {},
+        }
+        if (handle.root_decl.unwrap()) |decl_index| {
+            self.mod.?.destroyDecl(decl_index);
+            handle.root_decl = .none;
+        }
+        try self.mod.?.semaFile(handle);
+    }
 }
 
 /// Invalidates a build files.
@@ -709,7 +735,7 @@ fn garbageCollectionImports(self: *DocumentStore) error{OutOfMemory}!void {
         const handle = self.handles.values()[handle_index];
         log.debug("Closing document {s}", .{handle.uri});
         self.handles.swapRemoveAt(handle_index);
-        handle.deinit();
+        handle.deinit(self.mod);
         self.allocator.destroy(handle);
     }
 }
@@ -1074,7 +1100,7 @@ fn createDocument(self: *DocumentStore, uri: Uri, text: [:0]const u8, open: bool
     defer tracy_zone.end();
 
     var handle = try Handle.init(self.allocator, uri, text);
-    errdefer handle.deinit();
+    errdefer handle.deinit(self.mod);
 
     _ = handle.setOpen(open);
 
@@ -1112,6 +1138,17 @@ fn createDocument(self: *DocumentStore, uri: Uri, text: [:0]const u8, open: bool
     handle.import_uris = try self.collectImportUris(handle);
     handle.cimports = try collectCIncludes(self.allocator, handle.tree);
 
+    if (self.config.analysis_backend == .astgen_analyser) blk: {
+        const zir = try handle.getZir();
+        if (zir.hasCompileErrors()) break :blk;
+        switch (handle.getZirStatus()) {
+            .none => {},
+            .outdated => break :blk, // TODO support oudated
+            .done => {},
+        }
+        try self.mod.?.semaFile(&handle);
+    }
+
     return handle;
 }
 
@@ -1123,7 +1160,7 @@ fn createAndStoreDocument(self: *DocumentStore, uri: Uri, text: [:0]const u8, op
     errdefer self.allocator.destroy(handle_ptr);
 
     handle_ptr.* = try self.createDocument(uri, text, open);
-    errdefer handle_ptr.deinit();
+    errdefer handle_ptr.deinit(self.mod);
 
     const gop = blk: {
         self.lock.lock();
@@ -1132,7 +1169,7 @@ fn createAndStoreDocument(self: *DocumentStore, uri: Uri, text: [:0]const u8, op
     };
 
     if (gop.found_existing) {
-        handle_ptr.deinit();
+        handle_ptr.deinit(self.mod);
         self.allocator.destroy(handle_ptr);
     }
 

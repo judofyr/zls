@@ -442,6 +442,14 @@ fn declToCompletion(context: DeclToCompletionContext, decl_handle: Analyser.Decl
                 .insertTextFormat = .PlainText,
             });
         },
+        .intern_pool_index => |payload| try analyser_completions.dotCompletions(
+            context.arena,
+            context.completions,
+            context.analyser.ip,
+            payload.index,
+            false,
+            null,
+        ),
     }
 }
 
