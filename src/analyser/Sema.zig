@@ -1289,11 +1289,11 @@ fn lookupInNamespace(
     namespace: *Namespace,
     ident_name: []const u8,
 ) Allocator.Error!LookupResult {
-    const mod = sema.mod;
+    const ip = sema.mod.ip;
     _ = block;
 
-    const ident_name_index = sema.mod.ip.string_pool.getString(ident_name) orelse return .missing;
-    if (namespace.decls.getKeyAdapted(ident_name_index, Namespace.DeclStringAdapter{ .mod = mod })) |decl_index| {
+    const ident_name_index = ip.string_pool.getString(ident_name) orelse return .missing;
+    if (namespace.decls.getKeyAdapted(ident_name_index, Namespace.DeclStringAdapter{ .ip = ip })) |decl_index| {
         return .{ .found = decl_index };
     }
 
@@ -2396,7 +2396,7 @@ pub fn scanNamespace(
     const zir = namespace.handle.getCachedZir();
 
     try namespace.decls.ensureTotalCapacityContext(sema.gpa, decls_len, Namespace.DeclContext{
-        .mod = sema.mod,
+        .ip = sema.mod.ip,
     });
 
     const bit_bags_count = std.math.divCeil(u32, decls_len, 8) catch unreachable;
@@ -2505,14 +2505,14 @@ fn scanDecl(sema: *Sema, iter: *ScanDeclIter, decl_sub_index: u32, flags: u4) Al
     const is_exported = export_bit and decl_name_index != 0;
     if (kind == .@"usingnamespace") try namespace.usingnamespace_set.ensureUnusedCapacity(gpa, 1);
 
-    const decl_name_string_index = try mod.ip.string_pool.getOrPutString(mod.gpa, decl_name);
+    const decl_name_string_index = try mod.ip.string_pool.getOrPutString(gpa, decl_name);
 
     // We create a Decl for it regardless of analysis status.
     const gop = try namespace.decls.getOrPutContextAdapted(
         gpa,
         decl_name_string_index,
-        Namespace.DeclStringAdapter{ .mod = mod },
-        Namespace.DeclContext{ .mod = mod },
+        Namespace.DeclStringAdapter{ .ip = mod.ip },
+        Namespace.DeclContext{ .ip = mod.ip },
     );
 
     if (!gop.found_existing) {

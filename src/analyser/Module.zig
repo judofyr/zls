@@ -59,35 +59,35 @@ pub const Namespace = struct {
     usingnamespace_set: std.AutoHashMapUnmanaged(Decl.Index, bool) = .{},
 
     pub const DeclStringAdapter = struct {
-        mod: *Module,
+        ip: *InternPool,
 
         pub fn hash(self: @This(), s: InternPool.StringPool.String) u32 {
             var hasher = std.hash.Wyhash.init(0);
-            self.mod.ip.string_pool.hashString(&hasher, s);
+            self.ip.string_pool.hashString(&hasher, s);
             return @truncate(hasher.final());
         }
 
         pub fn eql(self: @This(), a: InternPool.StringPool.String, b_decl_index: Decl.Index, b_index: usize) bool {
             _ = b_index;
-            const b_decl = self.mod.declPtr(b_decl_index);
+            const b_decl = self.ip.getDecl(b_decl_index);
             return a == b_decl.name;
         }
     };
 
     pub const DeclContext = struct {
-        mod: *Module,
+        ip: *InternPool,
 
         pub fn hash(ctx: @This(), decl_index: Decl.Index) u32 {
-            const name_index = ctx.mod.ip.getDecl(decl_index).name;
+            const name_index = ctx.ip.getDecl(decl_index).name;
             var hasher = std.hash.Wyhash.init(0);
-            ctx.mod.ip.string_pool.hashString(&hasher, name_index);
+            ctx.ip.string_pool.hashString(&hasher, name_index);
             return @truncate(hasher.final());
         }
 
         pub fn eql(ctx: @This(), a_decl_index: Decl.Index, b_decl_index: Decl.Index, b_index: usize) bool {
             _ = b_index;
-            const a_decl_name_index = ctx.mod.ip.getDecl(a_decl_index).name;
-            const b_decl_name_index = ctx.mod.ip.getDecl(b_decl_index).name;
+            const a_decl_name_index = ctx.ip.getDecl(a_decl_index).name;
+            const b_decl_name_index = ctx.ip.getDecl(b_decl_index).name;
             return a_decl_name_index == b_decl_name_index;
         }
     };
