@@ -19,8 +19,6 @@ const ErrorMsg = @import("ErrorMsg.zig").ErrorMsg;
 const InternPool = @import("InternPool.zig");
 const Index = InternPool.Index;
 const Decl = InternPool.Decl;
-const DeclIndex = InternPool.DeclIndex;
-const OptionalDeclIndex = InternPool.OptionalDeclIndex;
 const StringPool = InternPool.StringPool;
 
 mod: *Module,
@@ -124,7 +122,7 @@ pub const Block = struct {
     namespace: InternPool.NamespaceIndex,
     params: std.ArrayListUnmanaged(Param) = .{},
     label: ?*Label = null,
-    src_decl: DeclIndex,
+    src_decl: Decl.Index,
     is_comptime: bool,
 
     const Param = struct {
@@ -1096,7 +1094,7 @@ fn zirCmpEq(
 fn zirDeclVal(sema: *Sema, block: *Block, inst: Zir.Inst.Index) Allocator.Error!Index {
     const inst_data = sema.code.instructions.items(.data)[inst].str_tok;
     const decl_name = inst_data.get(sema.code);
-    const decl_index = (try sema.lookupIdentifier(block, decl_name)) orelse return .none;
+    const decl_index = (try sema.lookupIdentifier(block, decl_name)).unwrap() orelse return .none;
     try sema.ensureDeclAnalyzed(decl_index);
     const decl = sema.mod.declPtr(decl_index);
     return decl.index;
@@ -1262,25 +1260,25 @@ fn zirErrorValue(sema: *Sema, block: *Block, inst: Zir.Inst.Index) Allocator.Err
     } });
 }
 
-fn lookupIdentifier(sema: *Sema, block: *Block, name: []const u8) !?DeclIndex {
+fn lookupIdentifier(sema: *Sema, block: *Block, name: []const u8) Allocator.Error!Decl.OptionalIndex {
     var namespace_index = block.namespace;
 
     while (namespace_index != .none) {
         const namespace = sema.mod.namespacePtr(namespace_index);
         switch (try sema.lookupInNamespace(block, namespace, name)) {
-            .found => |decl_index| return decl_index,
+            .found => |decl_index| return decl_index.toOptional(),
             .unknown => {}, // TODO does this produce false positives?
             .missing => {},
         }
         namespace_index = namespace.parent;
     }
     // TODO lazily analyse symbols in the root scope
-    return null;
+    return .none;
     // unreachable; // AstGen detects use of undeclared identifier errors.
 }
 
 const LookupResult = union(enum) {
-    found: DeclIndex,
+    found: Decl.Index,
     unknown,
     missing,
 };
@@ -2064,7 +2062,7 @@ fn zirStructDecl(
 fn resolveAnonymousDeclTypeName(
     sema: *Sema,
     block: *Block,
-    new_decl_index: DeclIndex,
+    new_decl_index: Decl.Index,
     name_strategy: Zir.Inst.NameStrategy,
     anon_prefix: []const u8,
     inst: ?Zir.Inst.Index,
@@ -2164,7 +2162,7 @@ fn coerce(
 //
 //
 
-fn ensureDeclAnalyzed(sema: *Sema, decl_index: DeclIndex) Allocator.Error!void {
+fn ensureDeclAnalyzed(sema: *Sema, decl_index: Decl.Index) Allocator.Error!void {
     const decl = sema.mod.declPtr(decl_index);
     switch (decl.analysis) {
         .unreferenced => {

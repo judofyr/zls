@@ -148,7 +148,7 @@ pub const BuildFile = struct {
 pub const Handle = struct {
     uri: Uri,
     tree: Ast,
-    root_decl: InternPool.OptionalDeclIndex = .none,
+    root_decl: InternPool.Decl.OptionalIndex = .none,
     /// Contains one entry for every import in the document
     import_uris: std.ArrayListUnmanaged(Uri) = .{},
     /// Contains one entry for every cimport in the document

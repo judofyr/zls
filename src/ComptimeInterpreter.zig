@@ -74,8 +74,8 @@ pub const Namespace = struct {
     node_idx: Ast.Node.Index,
     /// Will be a struct, enum, union, opaque or .none
     ty: InternPool.Index,
-    decls: std.StringArrayHashMapUnmanaged(InternPool.DeclIndex) = .{},
-    usingnamespaces: std.ArrayListUnmanaged(InternPool.DeclIndex) = .{},
+    decls: std.StringArrayHashMapUnmanaged(InternPool.Decl.Index) = .{},
+    usingnamespaces: std.ArrayListUnmanaged(InternPool.Decl.Index) = .{},
 
     pub const Index = InternPool.NamespaceIndex;
 
@@ -133,7 +133,7 @@ pub fn huntItDown(
     namespace: Namespace.Index,
     decl_name: []const u8,
     options: InterpretOptions,
-) ?InternPool.DeclIndex {
+) InternPool.Decl.OptionalIndex {
     _ = options;
 
     var current_namespace = namespace;
@@ -142,11 +142,11 @@ pub fn huntItDown(
         defer current_namespace = interpreter.namespaces.items(.parent)[@intFromEnum(current_namespace)];
 
         if (decls.get(decl_name)) |decl| {
-            return decl;
+            return decl.toOptional();
         }
     }
 
-    return null;
+    return .none;
 }
 
 // Might be useful in the future
@@ -265,7 +265,7 @@ pub fn interpret(
         .aligned_var_decl,
         .simple_var_decl,
         => {
-            var decls: *std.StringArrayHashMapUnmanaged(InternPool.DeclIndex) = &interpreter.namespaces.items(.decls)[@intFromEnum(namespace)];
+            var decls: *std.StringArrayHashMapUnmanaged(InternPool.Decl.Index) = &interpreter.namespaces.items(.decls)[@intFromEnum(namespace)];
 
             const name = analysis.getDeclName(tree, node_idx).?;
             const decl_index = try interpreter.ip.createDecl(interpreter.allocator, .{
@@ -423,7 +423,7 @@ pub fn interpret(
             }
 
             // Logic to find identifiers in accessible scopes
-            if (interpreter.huntItDown(namespace, identifier, options)) |decl_index| {
+            if (interpreter.huntItDown(namespace, identifier, options).unwrap()) |decl_index| {
                 const decl = interpreter.ip.getDecl(decl_index);
                 if (decl.index == .none) return InterpretResult{ .nothing = {} };
                 return InterpretResult{ .value = Value{
@@ -464,7 +464,7 @@ pub fn interpret(
 
                         const namespace_index = interpreter.ip.getNamespace(val);
                         if (namespace_index != .none) {
-                            if (interpreter.huntItDown(namespace_index, field_name, options)) |decl_index| {
+                            if (interpreter.huntItDown(namespace_index, field_name, options).unwrap()) |decl_index| {
                                 const decl = interpreter.ip.getDecl(decl_index);
                                 return InterpretResult{ .value = Value{
                                     .interpreter = interpreter,

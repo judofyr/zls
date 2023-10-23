@@ -76,7 +76,7 @@ pub fn printDocumentScope(doc_scope: DocumentScope) void {
     }
 }
 
-pub fn printDecl(mod: *Module, decl_index: InternPool.DeclIndex, level: usize) void {
+pub fn printDecl(mod: *Module, decl_index: InternPool.Decl.Index, level: usize) void {
     var decl = mod.declPtr(decl_index);
     std.io.getStdErr().writer().writeByteNTimes(' ', level * 2) catch {};
     std.debug.print("Decl({d}) {}\n", .{ @intFromEnum(decl_index), decl.name.fmt(&mod.ip.string_pool) });

@@ -13,13 +13,10 @@ const AstGen = @import("../stage2/AstGen.zig");
 
 const InternPool = @import("InternPool.zig");
 const Decl = InternPool.Decl;
-const DeclIndex = InternPool.DeclIndex;
-const OptionalDeclIndex = InternPool.OptionalDeclIndex;
 const Sema = @import("Sema.zig");
 
 gpa: Allocator,
 ip: *InternPool,
-// allocated_decls: std.SegmentedList(Decl, 0) = .{},
 allocated_namespaces: std.SegmentedList(Namespace, 0) = .{},
 document_store: *DocumentStore,
 
@@ -32,7 +29,6 @@ pub fn init(allocator: Allocator, ip: *InternPool, document_store: *DocumentStor
 }
 
 pub fn deinit(mod: *Module) void {
-    // mod.allocated_decls.deinit(mod.gpa);
     mod.allocated_namespaces.deinit(mod.gpa);
     mod.* = undefined;
 }
@@ -58,9 +54,9 @@ pub const Namespace = struct {
     handle: *Handle,
     /// Will be a struct, enum, union, or opaque.
     ty: InternPool.Index,
-    decls: std.ArrayHashMapUnmanaged(DeclIndex, void, DeclContext, false) = .{},
-    anon_decls: std.AutoArrayHashMapUnmanaged(DeclIndex, void) = .{},
-    usingnamespace_set: std.AutoHashMapUnmanaged(DeclIndex, bool) = .{},
+    decls: std.ArrayHashMapUnmanaged(Decl.Index, void, DeclContext, false) = .{},
+    anon_decls: std.AutoArrayHashMapUnmanaged(Decl.Index, void) = .{},
+    usingnamespace_set: std.AutoHashMapUnmanaged(Decl.Index, bool) = .{},
 
     pub const DeclStringAdapter = struct {
         mod: *Module,
@@ -71,7 +67,7 @@ pub const Namespace = struct {
             return @truncate(hasher.final());
         }
 
-        pub fn eql(self: @This(), a: InternPool.StringPool.String, b_decl_index: DeclIndex, b_index: usize) bool {
+        pub fn eql(self: @This(), a: InternPool.StringPool.String, b_decl_index: Decl.Index, b_index: usize) bool {
             _ = b_index;
             const b_decl = self.mod.declPtr(b_decl_index);
             return a == b_decl.name;
@@ -81,14 +77,14 @@ pub const Namespace = struct {
     pub const DeclContext = struct {
         mod: *Module,
 
-        pub fn hash(ctx: @This(), decl_index: DeclIndex) u32 {
+        pub fn hash(ctx: @This(), decl_index: Decl.Index) u32 {
             const name_index = ctx.mod.ip.getDecl(decl_index).name;
             var hasher = std.hash.Wyhash.init(0);
             ctx.mod.ip.string_pool.hashString(&hasher, name_index);
             return @truncate(hasher.final());
         }
 
-        pub fn eql(ctx: @This(), a_decl_index: DeclIndex, b_decl_index: DeclIndex, b_index: usize) bool {
+        pub fn eql(ctx: @This(), a_decl_index: Decl.Index, b_decl_index: Decl.Index, b_index: usize) bool {
             _ = b_index;
             const a_decl_name_index = ctx.mod.ip.getDecl(a_decl_index).name;
             const b_decl_name_index = ctx.mod.ip.getDecl(b_decl_index).name;
@@ -104,7 +100,7 @@ pub const Namespace = struct {
         writer: anytype,
     ) @TypeOf(writer).Error!void {
         if (ns.parent) |parent| {
-            const decl_index = ns.getDeclIndex();
+            const decl_index = ns.getDecl.Index();
             const decl = mod.declPtr(decl_index);
             try parent.renderFullyQualifiedName(mod, std.mem.sliceTo(decl.name, 0), writer);
         } else {
@@ -116,7 +112,7 @@ pub const Namespace = struct {
         }
     }
 
-    pub fn getDeclIndex(ns: Namespace, mod: *Module) DeclIndex {
+    pub fn getDeclIndex(ns: Namespace, mod: *Module) Decl.Index {
         return mod.ip.getStruct(mod.ip.indexToKey(ns.ty).struct_type).owner_decl.unwrap().?;
     }
 };
@@ -125,9 +121,9 @@ pub fn allocateNewDecl(
     mod: *Module,
     namespace: InternPool.NamespaceIndex,
     src_node: Ast.Node.Index,
-) Allocator.Error!DeclIndex {
+) Allocator.Error!Decl.Index {
     const decl: *Decl = try mod.ip.decls.addOne(mod.gpa);
-    const decl_index = @as(DeclIndex, @enumFromInt(mod.ip.decls.len - 1));
+    const decl_index = @as(Decl.Index, @enumFromInt(mod.ip.decls.len - 1));
 
     decl.* = .{
         .name = undefined,
@@ -180,7 +176,7 @@ pub fn destroyNamespace(mod: *Module, namespace_index: InternPool.NamespaceIndex
     usingnamespaces.deinit(gpa);
 }
 
-pub fn destroyDecl(mod: *Module, decl_index: DeclIndex) void {
+pub fn destroyDecl(mod: *Module, decl_index: Decl.Index) void {
     const decl = mod.declPtr(decl_index);
     if (decl.index != .none) {
         const namespace = mod.ip.getNamespace(decl.index);
@@ -191,11 +187,11 @@ pub fn destroyDecl(mod: *Module, decl_index: DeclIndex) void {
     decl.* = undefined;
 }
 
-pub fn declPtr(mod: *Module, decl_index: DeclIndex) *Decl {
+pub fn declPtr(mod: *Module, decl_index: Decl.Index) *Decl {
     return mod.ip.getDeclMut(decl_index);
 }
 
-pub fn declIsRoot(mod: *Module, decl_index: DeclIndex) bool {
+pub fn declIsRoot(mod: *Module, decl_index: Decl.Index) bool {
     const decl = mod.declPtr(decl_index);
     if (decl.src_namespace != .none)
         return false;
@@ -264,7 +260,7 @@ pub fn semaFile(mod: *Module, handle: *Handle) Allocator.Error!void {
     decl.analysis = .complete;
 }
 
-pub fn semaDecl(mod: *Module, decl_index: DeclIndex) Allocator.Error!void {
+pub fn semaDecl(mod: *Module, decl_index: Decl.Index) Allocator.Error!void {
     const decl = mod.declPtr(decl_index);
     decl.analysis = .in_progress;
 

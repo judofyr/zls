@@ -57,7 +57,7 @@ pub const StructIndex = enum(u32) { _ };
 
 pub const Struct = struct {
     fields: std.AutoArrayHashMapUnmanaged(SPString, Field),
-    owner_decl: OptionalDeclIndex,
+    owner_decl: Decl.OptionalIndex,
     zir_index: u32,
     namespace: NamespaceIndex,
     layout: std.builtin.Type.ContainerLayout = .Auto,
@@ -83,7 +83,7 @@ pub const ErrorUnion = struct {
 };
 
 pub const ErrorSet = struct {
-    owner_decl: OptionalDeclIndex,
+    owner_decl: Decl.OptionalIndex,
     names: []const SPString,
 };
 
@@ -197,35 +197,13 @@ pub const UnknownValue = struct {
     ty: Index,
 };
 
-pub const DeclIndex = enum(u32) {
-    _,
-
-    pub fn toOptional(i: DeclIndex) OptionalDeclIndex {
-        return @as(OptionalDeclIndex, @enumFromInt(@intFromEnum(i)));
-    }
-};
-
-pub const OptionalDeclIndex = enum(u32) {
-    none = std.math.maxInt(u32),
-    _,
-
-    pub fn init(oi: ?DeclIndex) OptionalDeclIndex {
-        return if (oi) |index| index.toOptional() else .none;
-    }
-
-    pub fn unwrap(oi: OptionalDeclIndex) ?DeclIndex {
-        if (oi == .none) return null;
-        return @as(DeclIndex, @enumFromInt(@intFromEnum(oi)));
-    }
-};
-
 pub const Decl = struct {
     name: SPString,
     node_idx: u32,
     src_line: u32,
     zir_decl_index: u32 = 0,
     /// this stores both the type and the value
-    index: Index,
+    index: InternPool.Index,
     alignment: u16,
     address_space: std.builtin.AddressSpace,
     src_namespace: InternPool.NamespaceIndex,
@@ -244,6 +222,28 @@ pub const Decl = struct {
         @"comptime",
         named,
         anon,
+    };
+
+    pub const Index = enum(u32) {
+        _,
+
+        pub fn toOptional(i: Decl.Index) OptionalIndex {
+            return @as(OptionalIndex, @enumFromInt(@intFromEnum(i)));
+        }
+    };
+
+    pub const OptionalIndex = enum(u32) {
+        none = std.math.maxInt(u32),
+        _,
+
+        pub fn init(oi: ?Decl.Index) OptionalIndex {
+            return if (oi) |index| index.toOptional() else .none;
+        }
+
+        pub fn unwrap(oi: OptionalIndex) ?Decl.Index {
+            if (oi == .none) return null;
+            return @as(Decl.Index, @enumFromInt(@intFromEnum(oi)));
+        }
     };
 };
 
@@ -912,10 +912,10 @@ pub fn contains(ip: *const InternPool, key: Key) ?Index {
     return @enumFromInt(index);
 }
 
-pub fn getDecl(ip: *const InternPool, index: InternPool.DeclIndex) *const InternPool.Decl {
+pub fn getDecl(ip: *const InternPool, index: InternPool.Decl.Index) *const InternPool.Decl {
     return ip.decls.at(@intFromEnum(index));
 }
-pub fn getDeclMut(ip: *InternPool, index: InternPool.DeclIndex) *InternPool.Decl {
+pub fn getDeclMut(ip: *InternPool, index: InternPool.Decl.Index) *InternPool.Decl {
     return ip.decls.at(@intFromEnum(index));
 }
 pub fn getStruct(ip: *const InternPool, index: InternPool.StructIndex) *const InternPool.Struct {
@@ -937,7 +937,7 @@ pub fn getUnionMut(ip: *InternPool, index: InternPool.UnionIndex) *InternPool.Un
     return ip.unions.at(@intFromEnum(index));
 }
 
-pub fn createDecl(ip: *InternPool, gpa: Allocator, decl: InternPool.Decl) Allocator.Error!InternPool.DeclIndex {
+pub fn createDecl(ip: *InternPool, gpa: Allocator, decl: InternPool.Decl) Allocator.Error!InternPool.Decl.Index {
     try ip.decls.append(gpa, decl);
     return @enumFromInt(ip.decls.count() - 1);
 }

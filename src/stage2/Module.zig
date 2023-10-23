@@ -1063,14 +1063,14 @@ pub const LazySrcLoc = union(enum) {
     for_capture_from_input: i32,
     /// The source location points to the argument node of a function call.
     call_arg: struct {
-        decl: InternPool.DeclIndex,
+        decl: InternPool.Decl.Index,
         /// Points to the function call AST node.
         call_node_offset: i32,
         /// The index of the argument the source location points to.
         arg_index: u32,
     },
     fn_proto_param: struct {
-        decl: InternPool.DeclIndex,
+        decl: InternPool.Decl.Index,
         /// Points to the function prototype AST node.
         fn_proto_node_offset: i32,
         /// The index of the parameter the source location points to.
@@ -1078,7 +1078,7 @@ pub const LazySrcLoc = union(enum) {
     },
     /// The source location points to a field in a container.
     container_field: struct {
-        decl: InternPool.DeclIndex,
+        decl: InternPool.Decl.Index,
         index: u32,
         query: enum { name, type, value, alignment },
     },
