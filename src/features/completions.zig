@@ -90,7 +90,6 @@ fn typeToCompletion(
             list,
             analyser.ip,
             payload.index,
-            type_handle.type.is_type_val,
             payload.node,
         ),
         .either => |bruh| {
@@ -447,7 +446,6 @@ fn declToCompletion(context: DeclToCompletionContext, decl_handle: Analyser.Decl
             context.completions,
             context.analyser.ip,
             payload.index,
-            false,
             null,
         ),
     }
