@@ -19,7 +19,8 @@ const assert = std.debug.assert;
 const expect = std.testing.expect;
 const expectFmt = std.testing.expectFmt;
 
-pub const StringPool = @import("StringPool.zig");
+pub const StringPool = @import("string_pool.zig").StringPool(.{});
+pub const SPString = StringPool.String;
 const encoding = @import("encoding.zig");
 const ErrorMsg = @import("ErrorMsg.zig").ErrorMsg;
 
@@ -55,7 +56,7 @@ pub const FieldStatus = enum {
 pub const StructIndex = enum(u32) { _ };
 
 pub const Struct = struct {
-    fields: std.AutoArrayHashMapUnmanaged(StringPool.String, Field),
+    fields: std.AutoArrayHashMapUnmanaged(SPString, Field),
     owner_decl: OptionalDeclIndex,
     zir_index: u32,
     namespace: NamespaceIndex,
@@ -83,14 +84,14 @@ pub const ErrorUnion = struct {
 
 pub const ErrorSet = struct {
     owner_decl: OptionalDeclIndex,
-    names: []const StringPool.String,
+    names: []const SPString,
 };
 
 pub const EnumIndex = enum(u32) { _ };
 
 pub const Enum = struct {
     tag_type: Index,
-    fields: std.AutoArrayHashMapUnmanaged(StringPool.String, void),
+    fields: std.AutoArrayHashMapUnmanaged(SPString, void),
     values: std.AutoArrayHashMapUnmanaged(Index, void),
     namespace: NamespaceIndex,
     tag_type_inferred: bool,
@@ -115,7 +116,7 @@ pub const UnionIndex = enum(u32) { _ };
 
 pub const Union = struct {
     tag_type: Index,
-    fields: std.AutoArrayHashMapUnmanaged(StringPool.String, Field),
+    fields: std.AutoArrayHashMapUnmanaged(SPString, Field),
     namespace: NamespaceIndex,
     layout: std.builtin.Type.ContainerLayout = .Auto,
     status: FieldStatus,
@@ -180,7 +181,7 @@ pub const UnionValue = struct {
 
 pub const ErrorValue = struct {
     ty: Index,
-    error_tag_name: StringPool.String,
+    error_tag_name: SPString,
 };
 
 pub const NullValue = struct {
@@ -219,7 +220,7 @@ pub const OptionalDeclIndex = enum(u32) {
 };
 
 pub const Decl = struct {
-    name: InternPool.StringPool.String,
+    name: SPString,
     node_idx: u32,
     src_line: u32,
     zir_decl_index: u32 = 0,
@@ -462,15 +463,15 @@ pub const Index = enum(u32) {
     none = std.math.maxInt(u32),
     _,
 
-    pub inline fn fmt(index: Index, ip: *const InternPool) std.fmt.Formatter(format) {
+    pub inline fn fmt(index: Index, ip: *InternPool) std.fmt.Formatter(format) {
         return fmtOptions(index, ip, .{});
     }
 
-    pub inline fn fmtDebug(index: Index, ip: *const InternPool) std.fmt.Formatter(format) {
+    pub inline fn fmtDebug(index: Index, ip: *InternPool) std.fmt.Formatter(format) {
         return fmtOptions(index, ip, .{ .debug = true });
     }
 
-    pub fn fmtOptions(index: Index, ip: *const InternPool, options: FormatOptions) std.fmt.Formatter(format) {
+    pub fn fmtOptions(index: Index, ip: *InternPool, options: FormatOptions) std.fmt.Formatter(format) {
         return .{ .data = .{ .index = index, .ip = ip, .options = options } };
     }
 };
@@ -1827,7 +1828,7 @@ const InMemoryCoercionResult = union(enum) {
     optional_shape: Pair,
     optional_child: PairAndChild,
     from_anyerror,
-    missing_error: []const StringPool.String,
+    missing_error: []const SPString,
     /// true if wanted is var args
     fn_var_args: bool,
     /// true if wanted is generic
@@ -2123,11 +2124,11 @@ fn coerceInMemoryAllowedErrorSets(
     const dest_set = ip.indexToKey(dest_ty).error_set_type;
     const src_set = ip.indexToKey(src_ty).error_set_type;
 
-    var missing_error_buf = std.ArrayListUnmanaged(StringPool.String){};
+    var missing_error_buf = std.ArrayListUnmanaged(SPString){};
     defer missing_error_buf.deinit(gpa);
 
     for (src_set.names) |name| {
-        if (std.mem.indexOfScalar(StringPool.String, dest_set.names, name) == null) {
+        if (std.mem.indexOfScalar(SPString, dest_set.names, name) == null) {
             try missing_error_buf.append(gpa, name);
         }
     }
@@ -2135,7 +2136,7 @@ fn coerceInMemoryAllowedErrorSets(
     if (missing_error_buf.items.len == 0) return .ok;
 
     return InMemoryCoercionResult{
-        .missing_error = try arena.dupe(StringPool.String, missing_error_buf.items),
+        .missing_error = try arena.dupe(SPString, missing_error_buf.items),
     };
 }
 
@@ -2875,7 +2876,7 @@ pub fn errorSetMerge(ip: *InternPool, gpa: std.mem.Allocator, a_ty: Index, b_ty:
     const a_names = ip.indexToKey(a_ty).error_set_type.names;
     const b_names = ip.indexToKey(b_ty).error_set_type.names;
 
-    var set = std.AutoArrayHashMapUnmanaged(StringPool.String, void){};
+    var set = std.AutoArrayHashMapUnmanaged(SPString, void){};
     defer set.deinit(gpa);
 
     try set.ensureTotalCapacity(gpa, a_names.len + b_names.len);
@@ -3172,7 +3173,7 @@ pub fn getUnknown(ip: *InternPool, gpa: Allocator, ty: Index) Allocator.Error!In
 const FormatContext = struct {
     index: Index,
     options: FormatOptions = .{},
-    ip: *const InternPool,
+    ip: *InternPool,
 };
 
 // TODO add options for controling how types show be formatted
@@ -3194,7 +3195,7 @@ fn format(
     }
 }
 
-pub fn print(ip: *const InternPool, index: Index, writer: anytype, options: FormatOptions) @TypeOf(writer).Error!void {
+pub fn print(ip: *InternPool, index: Index, writer: anytype, options: FormatOptions) @TypeOf(writer).Error!void {
     var tv = index;
     const ty = ip.typeOf(tv);
     while (true) {
@@ -3206,7 +3207,7 @@ pub fn print(ip: *const InternPool, index: Index, writer: anytype, options: Form
     if (options.debug and ty != .type_type) try writer.writeByte(')');
 }
 
-fn printInternal(ip: *const InternPool, ty: Index, writer: anytype, options: FormatOptions) @TypeOf(writer).Error!?Index {
+fn printInternal(ip: *InternPool, ty: Index, writer: anytype, options: FormatOptions) @TypeOf(writer).Error!?Index {
     switch (ip.indexToKey(ty)) {
         .simple_type => |simple| switch (simple) {
             .f16,
@@ -3308,7 +3309,7 @@ fn printInternal(ip: *const InternPool, ty: Index, writer: anytype, options: For
             const optional_decl_index = ip.getStruct(struct_index).owner_decl;
             const decl_index = optional_decl_index.unwrap() orelse return panicOrElse("TODO", null);
             const decl = ip.getDecl(decl_index);
-            try writer.print("{}", .{decl.name.fmtId(&ip.string_pool)});
+            try writer.print("{}", .{ip.fmtId(decl.name)});
         },
         .optional_type => |optional_info| {
             try writer.writeByte('?');
@@ -3324,14 +3325,14 @@ fn printInternal(ip: *const InternPool, ty: Index, writer: anytype, options: For
         .error_set_type => |error_set_info| {
             if (error_set_info.owner_decl.unwrap()) |decl_index| {
                 const decl = ip.getDecl(decl_index);
-                try writer.print("{}", .{decl.name.fmtId(&ip.string_pool)});
+                try writer.print("{}", .{ip.fmtId(decl.name)});
                 return null;
             }
             const names = error_set_info.names;
             try writer.writeAll("error{");
             for (names, 0..) |name, i| {
                 if (i != 0) try writer.writeByte(',');
-                try writer.print("{}", .{name.fmtId(&ip.string_pool)});
+                try writer.print("{}", .{ip.fmtId(name)});
             }
             try writer.writeByte('}');
         },
@@ -3438,7 +3439,7 @@ fn printInternal(ip: *const InternPool, ty: Index, writer: anytype, options: For
                 if (i != 0) try writer.writeAll(", ");
 
                 try writer.print(".{} = {}", .{
-                    field_name.fmtId(&ip.string_pool),
+                    ip.fmtId(field_name),
                     field.fmtOptions(ip, options),
                 });
             }
@@ -3449,16 +3450,36 @@ fn printInternal(ip: *const InternPool, ty: Index, writer: anytype, options: For
             const name = union_info.fields.keys()[union_value.field_index];
 
             try writer.print(".{{ .{} = {} }}", .{
-                name.fmtId(&ip.string_pool),
+                ip.fmtId(name),
                 union_value.val.fmtOptions(ip, options),
             });
         },
-        .error_value => |error_value| try writer.print("error.{}", .{error_value.error_tag_name.fmtId(&ip.string_pool)}),
+        .error_value => |error_value| try writer.print("error.{}", .{ip.fmtId(error_value.error_tag_name)}),
         .null_value => try writer.print("null", .{}),
         .undefined_value => try writer.print("undefined", .{}),
         .unknown_value => try writer.print("(unknown value)", .{}),
     }
     return null;
+}
+
+fn formatId(
+    ctx: struct {
+        ip: *InternPool,
+        string: SPString,
+    },
+    comptime fmt: []const u8,
+    options: std.fmt.FormatOptions,
+    writer: anytype,
+) @TypeOf(writer).Error!void {
+    _ = options;
+    if (fmt.len != 0) std.fmt.invalidFmtError(fmt, InternPool.Struct.Field);
+    ctx.ip.string_pool.mutex.lock();
+    defer ctx.ip.string_pool.mutex.unlock();
+    try writer.print("{}", .{std.zig.fmtId(ctx.ip.string_pool.stringToSliceUnsafe(ctx.string))});
+}
+
+pub fn fmtId(ip: *InternPool, field: SPString) std.fmt.Formatter(formatId) {
+    return .{ .data = .{ .ip = ip, .string = field } };
 }
 
 // ---------------------------------------------

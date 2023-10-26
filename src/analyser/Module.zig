@@ -66,8 +66,9 @@ pub const Namespace = struct {
         mod: *Module,
 
         pub fn hash(self: @This(), s: InternPool.StringPool.String) u32 {
-            const name = self.mod.ip.string_pool.stringToSlice(s);
-            return std.array_hash_map.hashString(name);
+            var hasher = std.hash.Wyhash.init(0);
+            self.mod.ip.string_pool.hashString(&hasher, s);
+            return @truncate(hasher.final());
         }
 
         pub fn eql(self: @This(), a: InternPool.StringPool.String, b_decl_index: DeclIndex, b_index: usize) bool {
@@ -82,8 +83,9 @@ pub const Namespace = struct {
 
         pub fn hash(ctx: @This(), decl_index: DeclIndex) u32 {
             const name_index = ctx.mod.ip.getDecl(decl_index).name;
-            const decl_name = ctx.mod.ip.string_pool.stringToSlice(name_index);
-            return std.array_hash_map.hashString(decl_name);
+            var hasher = std.hash.Wyhash.init(0);
+            ctx.mod.ip.string_pool.hashString(&hasher, name_index);
+            return @truncate(hasher.final());
         }
 
         pub fn eql(ctx: @This(), a_decl_index: DeclIndex, b_decl_index: DeclIndex, b_index: usize) bool {
@@ -311,6 +313,8 @@ pub fn semaDecl(mod: *Module, decl_index: DeclIndex) Allocator.Error!void {
     decl.index = if (try sema.analyzeBodyBreak(&block_scope, body)) |break_data| sema.resolveIndex(break_data.operand) else .none;
     decl.analysis = .complete;
 
-    const decl_name2 = sema.mod.ip.string_pool.stringToSlice(decl.name);
-    try sema.addDbgVar(&block_scope, decl.index, false, decl_name2);
+    const decl_name = try mod.ip.string_pool.stringToSliceAlloc(mod.gpa, decl.name);
+    defer mod.gpa.free(decl_name);
+
+    try sema.addDbgVar(&block_scope, decl.index, false, decl_name);
 }

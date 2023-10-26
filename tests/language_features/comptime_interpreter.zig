@@ -240,7 +240,7 @@ test "ComptimeInterpreter - call return struct" {
     try std.testing.expectEqual(std.builtin.Type.ContainerLayout.Auto, struct_info.layout);
 
     try std.testing.expectEqual(@as(usize, 1), struct_info.fields.count());
-    try std.testing.expectEqualStrings("slay", context.interpreter.ip.string_pool.stringToSlice(struct_info.fields.keys()[0]));
+    try std.testing.expectFmt("slay", "{}", .{context.interpreter.ip.fmtId(struct_info.fields.keys()[0])});
     try std.testing.expect(struct_info.fields.values()[0].ty == Index.bool_type);
 }
 
@@ -468,7 +468,7 @@ fn testExpr(
     try expectEqualIndex(context.interpreter.ip, expected_index, val);
 }
 
-fn expectEqualIndex(ip: *const InternPool, expected: Index, actual: Index) !void {
+fn expectEqualIndex(ip: *InternPool, expected: Index, actual: Index) !void {
     if (expected == actual) return;
     std.debug.print("expected `{}`, found `{}`\n", .{ expected.fmtDebug(ip), actual.fmtDebug(ip) });
     return error.TestExpectedEqual;

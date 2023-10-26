@@ -55,10 +55,10 @@ pub const ErrorMsg = union(enum) {
 
     const FormatContext = struct {
         error_msg: ErrorMsg,
-        ip: *const InternPool,
+        ip: *InternPool,
     };
 
-    pub fn fmt(self: ErrorMsg, ip: *const InternPool) std.fmt.Formatter(format) {
+    pub fn fmt(self: ErrorMsg, ip: *InternPool) std.fmt.Formatter(format) {
         return .{ .data = .{ .error_msg = self, .ip = ip } };
     }
 

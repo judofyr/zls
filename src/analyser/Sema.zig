@@ -2068,7 +2068,7 @@ fn resolveAnonymousDeclTypeName(
     name_strategy: Zir.Inst.NameStrategy,
     anon_prefix: []const u8,
     inst: ?Zir.Inst.Index,
-) Allocator.Error!InternPool.StringPool.String {
+) Allocator.Error!InternPool.SPString {
     const mod = sema.mod;
     const src_decl = mod.declPtr(block.src_decl);
 
